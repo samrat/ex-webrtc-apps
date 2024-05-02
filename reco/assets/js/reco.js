@@ -65,14 +65,15 @@ async function run() {
 
   pc = new RTCPeerConnection(pcConfig);
   pc.onicecandidate = ev => {
-    channel.push('signaling', JSON.stringify({ type: 'ice', data: ev.candidate }));
+    channel.push('signaling', JSON.stringify({ type: 'ice_candidate', data: ev.candidate }));
   };
   pc.addTrack(localStream.getAudioTracks()[0]);
   pc.addTrack(localStream.getVideoTracks()[0]);
 
   offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
-  channel.push("signaling", JSON.stringify(offer));
+  channel.push("signaling", JSON.stringify({ type: "sdp_offer", data: offer }));
+  // channel.push("signaling", JSON.stringify(offer));
 }
 
 button.onclick = () => {

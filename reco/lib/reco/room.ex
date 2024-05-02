@@ -1,3 +1,42 @@
+defmodule Example.Pipeline do
+  use Membrane.Pipeline
+
+  alias Membrane.WebRTC
+
+  @impl true
+  def handle_init(_ctx, opts) do
+    spec =
+      [
+        child(:webrtc, %WebRTC.Source{
+          signaling: opts[:signaling_channel]
+        }),
+        child(:matroska, Membrane.Matroska.Muxer),
+        get_child(:webrtc)
+        |> via_out(:output, options: [kind: :audio])
+        |> child(Membrane.Opus.Parser)
+        |> get_child(:matroska),
+        get_child(:webrtc)
+        |> via_out(:output, options: [kind: :video])
+        |> get_child(:matroska),
+        get_child(:matroska)
+        |> child(:sink, %Membrane.File.Sink{location: "recording.mkv"})
+      ]
+
+    {[spec: spec], %{}}
+  end
+
+  @impl true
+  def handle_element_end_of_stream(:sink, :input, _ctx, state) do
+    {[terminate: :normal], state}
+  end
+
+  @impl true
+  def handle_element_end_of_stream(_element, _pad, _ctx, state) do
+    {[], state}
+  end
+end
+
+
 defmodule Reco.Room do
   use GenServer, restart: :temporary
 
@@ -32,6 +71,12 @@ defmodule Reco.Room do
     Logger.info("Starting room: #{room_id}")
     Process.send_after(self(), :session_time, @session_time_timer_interval_ms)
 
+    signaling_channel = Membrane.WebRTC.SignalingChannel.new()
+    {:ok, supervisor, _pipeline} = Membrane.Pipeline.start_link(Example.Pipeline, signaling_channel: signaling_channel)
+    Membrane.WebRTC.SignalingChannel.register_peer(signaling_channel, message_format: :json_data)
+
+    Process.monitor(supervisor)
+
     {:ok,
      %{
        id: room_id,
@@ -42,7 +87,8 @@ defmodule Reco.Room do
        video_depayloader: VP8Depayloader.new(),
        video_decoder: Xav.Decoder.new(:vp8),
        audio_track: nil,
-       session_start_time: System.monotonic_time(:millisecond)
+       session_start_time: System.monotonic_time(:millisecond),
+       signaling_channel: signaling_channel
      }}
   end
 
@@ -66,22 +112,25 @@ defmodule Reco.Room do
 
   @impl true
   def handle_cast({:receive_signaling_msg, msg}, state) do
-    case Jason.decode!(msg) do
-      %{"type" => "offer"} = offer ->
-        desc = SessionDescription.from_json(offer)
-        :ok = PeerConnection.set_remote_description(state.pc, desc)
-        {:ok, answer} = PeerConnection.create_answer(state.pc)
-        :ok = PeerConnection.set_local_description(state.pc, answer)
-        msg = %{"type" => "answer", "sdp" => answer.sdp}
-        send(state.channel, {:signaling, msg})
+    IO.inspect("Received signaling message: #{inspect(msg)}")
+    Membrane.WebRTC.SignalingChannel.signal(state.signaling_channel, Jason.decode!(msg))
 
-      %{"type" => "ice", "data" => data} when data != nil ->
-        candidate = ICECandidate.from_json(data)
-        :ok = PeerConnection.add_ice_candidate(state.pc, candidate)
+    # case Jason.decode!(msg) do
+    #   %{"type" => "offer"} = offer ->
+    #     desc = SessionDescription.from_json(offer)
+    #     :ok = PeerConnection.set_remote_description(state.pc, desc)
+    #     {:ok, answer} = PeerConnection.create_answer(state.pc)
+    #     :ok = PeerConnection.set_local_description(state.pc, answer)
+    #     msg = %{"type" => "answer", "sdp" => answer.sdp}
+    #     send(state.channel, {:signaling, msg})
 
-      _ ->
-        Logger.warning("Unexpected msg: #{inspect(msg)}")
-    end
+    #   %{"type" => "ice", "data" => data} when data != nil ->
+    #     candidate = ICECandidate.from_json(data)
+    #     :ok = PeerConnection.add_ice_candidate(state.pc, candidate)
+
+    #   _ ->
+    #     Logger.warning("Unexpected msg: #{inspect(msg)}")
+    # end
 
     {:noreply, state}
   end

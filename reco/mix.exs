@@ -48,6 +48,12 @@ defmodule Reco.MixProject do
       {:plug_cowboy, "~> 2.5"},
       {:ex_webrtc, "~> 0.1.0"},
       {:ex_webrtc_dashboard, "~> 0.1.0"},
+      {:membrane_webrtc_plugin, "~> 0.19.0"},
+      {:membrane_file_plugin, "~> 0.17.0"},
+      {:membrane_realtimer_plugin, "~> 0.9.0"},
+      {:membrane_matroska_plugin, "~> 0.5.1"},
+      {:membrane_opus_plugin, "~> 0.20.1"},
+      {:membrane_h26x_plugin, "~> 0.10.1"},
       {:xav, "~> 0.2.0"},
       {:bumblebee, "~> 0.4.2"},
       {:exla, "~> 0.5"}
