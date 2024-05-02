@@ -44,11 +44,12 @@ async function run() {
     })
 
   channel.on("signaling", msg => {
-    if (msg.type == 'answer') {
+    if (msg.type == 'sdp_answer') {
+      msg.type = 'answer';
       console.log("Setting remote answer");
-      pc.setRemoteDescription(msg);
-    } else if (msg.type == 'ice') {
-      console.log("Adding ICE candidate");
+      pc.setRemoteDescription(msg.data);
+    } else if (msg.type == 'ice_candidate') {
+      console.log("Adding ICE candidate", msg);
       pc.addIceCandidate(msg.data);
     }
   })
@@ -65,6 +66,8 @@ async function run() {
 
   pc = new RTCPeerConnection(pcConfig);
   pc.onicecandidate = ev => {
+    if (ev.candidate === null || ev.candidate.protocol !== 'udp') return; // ExICE supports only UDP
+    console.log("Sending ICE candidate", ev.candidate);
     channel.push('signaling', JSON.stringify({ type: 'ice_candidate', data: ev.candidate }));
   };
   pc.addTrack(localStream.getAudioTracks()[0]);

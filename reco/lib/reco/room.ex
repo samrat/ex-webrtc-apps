@@ -83,10 +83,6 @@ defmodule Reco.Room do
        pc: nil,
        channel: nil,
        task: nil,
-       video_track: nil,
-       video_depayloader: VP8Depayloader.new(),
-       video_decoder: Xav.Decoder.new(:vp8),
-       audio_track: nil,
        session_start_time: System.monotonic_time(:millisecond),
        signaling_channel: signaling_channel
      }}
@@ -115,85 +111,7 @@ defmodule Reco.Room do
     IO.inspect("Received signaling message: #{inspect(msg)}")
     Membrane.WebRTC.SignalingChannel.signal(state.signaling_channel, Jason.decode!(msg))
 
-    # case Jason.decode!(msg) do
-    #   %{"type" => "offer"} = offer ->
-    #     desc = SessionDescription.from_json(offer)
-    #     :ok = PeerConnection.set_remote_description(state.pc, desc)
-    #     {:ok, answer} = PeerConnection.create_answer(state.pc)
-    #     :ok = PeerConnection.set_local_description(state.pc, answer)
-    #     msg = %{"type" => "answer", "sdp" => answer.sdp}
-    #     send(state.channel, {:signaling, msg})
-
-    #   %{"type" => "ice", "data" => data} when data != nil ->
-    #     candidate = ICECandidate.from_json(data)
-    #     :ok = PeerConnection.add_ice_candidate(state.pc, candidate)
-
-    #   _ ->
-    #     Logger.warning("Unexpected msg: #{inspect(msg)}")
-    # end
-
     {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:ex_webrtc, _pc, {:ice_candidate, candidate}}, state) do
-    candidate = ICECandidate.to_json(candidate)
-    send(state.channel, {:signaling, %{"type" => "ice", "data" => candidate}})
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:ex_webrtc, _pc, {:connection_state_change, :connected}}, state) do
-    Logger.info("Connection state changed - connected!")
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_info({:ex_webrtc, _pc, {:track, %{kind: :audio} = track}}, state) do
-    {:noreply, %{state | audio_track: track}}
-  end
-
-  @impl true
-  def handle_info({:ex_webrtc, _pc, {:track, %{kind: :video} = track}}, state) do
-    {:noreply, %{state | video_track: track}}
-  end
-
-  @impl true
-  def handle_info({:ex_webrtc, _pc, {:rtp, track_id, packet}}, state) do
-    cond do
-      state.video_track.id == track_id ->
-        case VP8Depayloader.write(state.video_depayloader, packet) do
-          {:ok, d} ->
-            state = %{state | video_depayloader: d}
-            {:noreply, state}
-
-          {:ok, frame, d} ->
-            state = %{state | video_depayloader: d}
-
-            case Xav.Decoder.decode(state.video_decoder, frame) do
-              {:ok, frame} ->
-                tensor = Xav.Frame.to_nx(frame)
-
-                state =
-                  if state.task == nil do
-                    task = Task.async(fn -> Nx.Serving.batched_run(Reco.VideoServing, tensor) end)
-                    %{state | task: task}
-                  else
-                    state
-                  end
-
-                {:noreply, state}
-
-              {:error, :no_keyframe} ->
-                Logger.warning("Couldn't decode video frame - missing keyframe!")
-                {:noreply, state}
-            end
-        end
-
-      state.audio_track.id == track_id ->
-        # Do something fun with the audio!
-        {:noreply, state}
-    end
   end
 
   @impl true
@@ -231,6 +149,13 @@ defmodule Reco.Room do
   end
 
   @impl true
+  def handle_info({Membrane.WebRTC.SignalingChannel, _pid, msg}, state) do
+    IO.inspect("Sending signaling message: #{inspect(msg)}")
+    send(state.channel, {:signaling, msg})
+    {:noreply, state}
+  end
+
+  @impl true
   def handle_info({_ref, predicitons}, state) do
     send(state.channel, {:img_reco, predicitons})
     state = %{state | task: nil}
@@ -238,7 +163,8 @@ defmodule Reco.Room do
   end
 
   @impl true
-  def handle_info(_msg, state) do
+  def handle_info(msg, state) do
+    IO.inspect("Unhandled message: #{inspect(msg)}")
     {:noreply, state}
   end
 end
