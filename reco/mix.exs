@@ -54,6 +54,7 @@ defmodule Reco.MixProject do
       {:membrane_matroska_plugin, "~> 0.5.1"},
       {:membrane_opus_plugin, "~> 0.20.1"},
       {:membrane_h26x_plugin, "~> 0.10.1"},
+      {:membrane_rtp_h264_plugin, github: "membraneframework/membrane_rtp_h264_plugin", override: true},
       {:xav, "~> 0.2.0"},
       {:bumblebee, "~> 0.4.2"},
       {:exla, "~> 0.5"}

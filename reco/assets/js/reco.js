@@ -43,14 +43,24 @@ async function run() {
       window.location.href = "/reco";
     })
 
-  channel.on("signaling", msg => {
+  channel.on("signaling", async (msg) => {
     if (msg.type == 'sdp_answer') {
       msg.type = 'answer';
       console.log("Setting remote answer");
-      pc.setRemoteDescription(msg.data);
+      try {
+        await pc.setRemoteDescription(msg.data);
+      } catch (e) {
+        console.log(e);
+      }
     } else if (msg.type == 'ice_candidate') {
       console.log("Adding ICE candidate", msg);
-      pc.addIceCandidate(msg.data);
+      try {
+        await pc.addIceCandidate(msg.data);
+      } catch (e) {
+        console.log(e);
+      }
+    } else {
+      console.log("Unhandled signaling message", msg);
     }
   })
 
@@ -70,8 +80,25 @@ async function run() {
     console.log("Sending ICE candidate", ev.candidate);
     channel.push('signaling', JSON.stringify({ type: 'ice_candidate', data: ev.candidate }));
   };
-  pc.addTrack(localStream.getAudioTracks()[0]);
-  pc.addTrack(localStream.getVideoTracks()[0]);
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState == "connected") {
+      const button = document.createElement('button');
+      const connStatus = document.getElementById('connStatus');
+      button.innerHTML = "Disconnect";
+      button.onclick = () => {
+        localStream.getTracks().forEach(track => track.stop())
+      }
+      connStatus.innerHTML = "Connected ";
+      connStatus.appendChild(button);
+    }
+  }
+
+  for (const track of localStream.getTracks()) {
+    pc.addTrack(track, localStream);
+  }
+  // pc.addTrack(localStream.getAudioTracks()[0]);
+  // pc.addTrack(localStream.getVideoTracks()[0]);
 
   offer = await pc.createOffer();
   await pc.setLocalDescription(offer);
