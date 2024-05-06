@@ -48,6 +48,7 @@ defmodule Reco.MixProject do
       {:plug_cowboy, "~> 2.5"},
       {:ex_webrtc, "~> 0.1.0"},
       {:ex_webrtc_dashboard, "~> 0.1.0"},
+      {:ex_ice, github: "elixir-webrtc/ex_ice", override: true},
       {:membrane_webrtc_plugin, "~> 0.19.0"},
       {:membrane_file_plugin, "~> 0.17.0"},
       {:membrane_realtimer_plugin, "~> 0.9.0"},

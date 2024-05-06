@@ -72,7 +72,7 @@ defmodule Reco.Room do
     Process.send_after(self(), :session_time, @session_time_timer_interval_ms)
 
     signaling_channel = Membrane.WebRTC.SignalingChannel.new()
-    {:ok, supervisor, _pipeline} = Membrane.Pipeline.start_link(Example.Pipeline, signaling_channel: signaling_channel)
+    {:ok, supervisor, _pipeline} = Membrane.Pipeline.start(Example.Pipeline, signaling_channel: signaling_channel)
     Membrane.WebRTC.SignalingChannel.register_peer(signaling_channel, message_format: :json_data)
 
     Process.monitor(supervisor)
